@@ -3,14 +3,40 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTauriEvent } from "../hooks/useTauriEvent";
 
 const MAX_LOG = 200;
+const STORAGE_KEY = "status-monitor-presets";
+
+let _idCounter = 0;
+function uid() {
+  return `_custom_${Date.now()}_${_idCounter++}`;
+}
 
 const DEFAULT_PRESETS = [
-  "STATUS_REQ",
-  "GET_TEMP",
-  "GET_HUMIDITY",
-  "GET_PRESSURE",
-  "GET_ALL",
+  { id: "_status_req", name: "STATUS_REQ (ASCII)", command: "STATUS_REQ", format: "ascii" },
+  { id: "_get_temp", name: "GET_TEMP (ASCII)", command: "GET_TEMP", format: "ascii" },
+  { id: "_get_humidity", name: "GET_HUMIDITY (ASCII)", command: "GET_HUMIDITY", format: "ascii" },
+  { id: "_get_pressure", name: "GET_PRESSURE (ASCII)", command: "GET_PRESSURE", format: "ascii" },
+  { id: "_get_all", name: "GET_ALL (ASCII)", command: "GET_ALL", format: "ascii" },
 ];
+
+function isDefault(id) {
+  return id.startsWith("_") && !id.startsWith("_custom_");
+}
+
+function loadPresets() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (_) {}
+  return [...DEFAULT_PRESETS];
+}
+
+function savePresets(presets) {
+  const custom = presets.filter((p) => !isDefault(p.id));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(custom));
+}
 
 function alarmLabel(a) {
   const parts = [];
@@ -56,15 +82,20 @@ function sensorLabel(s) {
 }
 
 export default function StatusMonitor() {
-  const [presets, setPresets] = useState(DEFAULT_PRESETS);
-  const [selected, setSelected] = useState(DEFAULT_PRESETS[0]);
+  const [presets, setPresets] = useState(loadPresets);
+  const [selectedId, setSelectedId] = useState(() => presets[0]?.id || "");
+  const [sendFormat, setSendFormat] = useState(() => presets[0]?.format || "ascii");
+  const [customName, setCustomName] = useState("");
   const [customCmd, setCustomCmd] = useState("");
+  const [customFormat, setCustomFormat] = useState("ascii");
   const [dataLog, setDataLog] = useState([]);
   const [diagData, setDiagData] = useState(null);
   const [error, setError] = useState("");
   const [stats, setStats] = useState({ totalBytes: 0, msgCount: 0, lastTime: null });
   const logEndRef = useRef(null);
   const customRef = useRef(null);
+
+  const selectedPreset = presets.find((p) => p.id === selectedId);
 
   useTauriEvent("status-data", (payload) => {
     setDataLog((prev) => {
@@ -86,11 +117,45 @@ export default function StatusMonitor() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [dataLog.length]);
 
-  const handleSend = async (cmd) => {
-    const command = cmd || selected;
+  const handlePresetSelect = (id) => {
+    setSelectedId(id);
+    const p = presets.find((p) => p.id === id);
+    if (p) setSendFormat(p.format);
+  };
+
+  const toggleSendFormat = () => {
+    setSendFormat((f) => (f === "ascii" ? "hex" : "ascii"));
+  };
+
+  const toggleCustomFormat = () => {
+    setCustomFormat((f) => (f === "ascii" ? "hex" : "ascii"));
+  };
+
+  const handleSend = async () => {
+    const p = selectedPreset;
+    if (!p) return;
     setError("");
     try {
-      await invoke("send_command", { command, mode: "StatusMonitoring" });
+      await invoke("send_command", {
+        command: p.command,
+        mode: "StatusMonitoring",
+        format: sendFormat,
+      });
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleSendCustom = async (cmd) => {
+    const command = cmd || customCmd.trim();
+    if (!command) return;
+    setError("");
+    try {
+      await invoke("send_command", {
+        command,
+        mode: "StatusMonitoring",
+        format: customFormat,
+      });
     } catch (e) {
       setError(String(e));
     }
@@ -104,17 +169,33 @@ export default function StatusMonitor() {
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && customCmd.trim()) {
-      handleSend(customCmd.trim());
+      handleSendCustom(customCmd.trim());
       setCustomCmd("");
     }
   };
 
   const addPreset = () => {
     const cmd = customCmd.trim();
-    if (cmd && !presets.includes(cmd)) {
-      setPresets([...presets, cmd]);
-      setSelected(cmd);
-      setCustomCmd("");
+    if (!cmd) return;
+    const name = customName.trim() || cmd;
+    const newPreset = { id: uid(), name, command: cmd, format: customFormat };
+    const updated = [...presets, newPreset];
+    setPresets(updated);
+    savePresets(updated);
+    setSelectedId(newPreset.id);
+    setSendFormat(customFormat);
+    setCustomCmd("");
+    setCustomName("");
+  };
+
+  const deletePreset = () => {
+    if (!selectedPreset || isDefault(selectedPreset.id)) return;
+    const updated = presets.filter((p) => p.id !== selectedId);
+    setPresets(updated);
+    savePresets(updated);
+    if (updated.length > 0) {
+      setSelectedId(updated[0].id);
+      setSendFormat(updated[0].format);
     }
   };
 
@@ -167,17 +248,37 @@ export default function StatusMonitor() {
         <div className="command-row">
           <select
             className="cmd-select"
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
+            value={selectedId}
+            onChange={(e) => handlePresetSelect(e.target.value)}
           >
             {presets.map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p.id} value={p.id}>
+                {p.name} [{p.format.toUpperCase()}]
+              </option>
             ))}
           </select>
-          <button className="btn-primary" onClick={() => handleSend()}>
+          <button
+            className={`fmt-toggle ${sendFormat === "hex" ? "fmt-hex" : "fmt-ascii"}`}
+            onClick={toggleSendFormat}
+            title="切换 ASCII / HEX 发送格式"
+          >
+            {sendFormat.toUpperCase()}
+          </button>
+          <button className="btn-primary" onClick={handleSend}>
             发送
           </button>
+          {selectedPreset && !isDefault(selectedPreset.id) && (
+            <button className="btn-delete-preset" onClick={deletePreset} title="删除此预设">
+              ×
+            </button>
+          )}
           <div className="cmd-divider" />
+          <input
+            className="cmd-input-name"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            placeholder="预设名称"
+          />
           <input
             ref={customRef}
             className="cmd-input"
@@ -186,6 +287,13 @@ export default function StatusMonitor() {
             onKeyDown={handleKeyDown}
             placeholder="自定义命令，回车发送"
           />
+          <button
+            className={`fmt-toggle ${customFormat === "hex" ? "fmt-hex" : "fmt-ascii"}`}
+            onClick={toggleCustomFormat}
+            title="切换 ASCII / HEX 发送格式"
+          >
+            {customFormat.toUpperCase()}
+          </button>
           <button
             className="btn-secondary"
             onClick={addPreset}

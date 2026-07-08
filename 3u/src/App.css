@@ -512,6 +512,92 @@ body,
   border-color: var(--gray-300);
 }
 
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Format toggle button */
+.fmt-toggle {
+  padding: 8px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  min-width: 56px;
+  text-align: center;
+}
+
+.fmt-ascii {
+  background: var(--blue-50);
+  color: var(--blue-500);
+  border-color: var(--blue-100);
+}
+
+.fmt-ascii:hover {
+  background: var(--blue-100);
+}
+
+.fmt-hex {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.fmt-hex:hover {
+  background: #fde68a;
+}
+
+/* Delete preset button */
+.btn-delete-preset {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  background: var(--white);
+  color: var(--gray-500);
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-delete-preset:hover {
+  background: var(--red-100);
+  color: var(--red-500);
+  border-color: var(--red-400);
+}
+
+/* Preset name input */
+.cmd-input-name {
+  width: 120px;
+  padding: 8px 10px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--gray-50);
+  color: var(--gray-900);
+  outline: none;
+  transition: border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.cmd-input-name:focus {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(54, 109, 238, 0.1);
+}
+
+.cmd-input-name::placeholder {
+  color: var(--gray-300);
+}
+
 .inline-error {
   margin: 0 20px 14px;
   padding: 8px 14px;
